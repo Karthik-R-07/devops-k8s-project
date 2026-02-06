@@ -1,8 +1,10 @@
 trigger:
-- main
+ paths:
+   include:
+     - terraform-demo/*
 
 pool:
-  vmImage: ubuntu-latest
+  name: 'devopstest'
 
 variables:
   imageName: devops-demo
@@ -19,50 +21,31 @@ steps:
     terraform version
   displayName: 'Install Terraform'
 
-# Run Terraform
+# Install Azure CLI
+
 - script: |
-    cd Terraform-demo
+    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    az version
+  displayName: 'Install Azure CLI'
+
+# Login to Azure using Service Connection
+- task: AzureCLI@2
+  displayName: 'Azure login'
+  inputs:
+    azureSubscription: 'Testproject'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+     az account show
+
+# Run Terraform & Provision Azure Infrastructure
+- script: |
+    cd terraform-demo
     terraform init
     terraform apply -auto-approve
   displayName: 'Terraform Apply'
-
-# Provision Azure Infrastructure
-- script: |
-    cd Terraform-demo
-    terraform init
-    terraform apply -auto-approve
-  displayName: 'Terraform Apply'
-  
-  # Build & Push Docker Image to ACR (Docker runs in Azure, not your laptop)
-- task: Docker@2
-  displayName: 'Build and Push Image'
-  inputs:
-    containerRegistry: 'acrterraformtestdev'
-    repository: $(imageName)
-    command: buildAndPush
-    Dockerfile: app/Dockerfile
-    tags: latest
-
-# Deploy to AKS - Deployment
-- task: Kubernetes@1
-  displayName: 'Deploy App to AKS'
-  inputs:
-    connectionType: Azure Resource Manager
-    azureSubscriptionEndpoint: 'Testproject'
-    azureResourceGroup: 'terraform-test'
-    kubernetesCluster: 'aks-cluster-terraform'
-    command: apply
-    useConfigurationFile: true
-    configuration: k8s/deployment.yaml
-
-# Deploy Service (Expose to Internet)
-- task: Kubernetes@1
-  displayName: 'Expose Service'
-  inputs:
-    connectionType: Azure Resource Manager
-    azureSubscriptionEndpoint: 'Testproject'
-    azureResourceGroup: 'terraform-test'
-    kubernetesCluster: 'aks-cluster-terraform'
-    command: apply
-    useConfigurationFile: true
-    configuration: k8s/service.yaml
+  env:
+    ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+    ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+    ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+    ARM_TENANT_ID: $(ARM_TENANT_ID)

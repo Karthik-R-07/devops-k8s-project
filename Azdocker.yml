@@ -1,0 +1,76 @@
+trigger:
+ paths:
+     include:
+         - app/*
+         - k8s/*
+
+pool:
+  name: 'devopstest'   # Self-hosted Azure VM agent
+
+variables:
+  imageName: devops-demo
+  acrName: acrterraformtestdev
+  rgName: terraform-test
+  aksName: aks-cluster-terraform
+
+steps:
+
+# Login to Azure
+- task: AzureCLI@2
+  displayName: 'Azure Login'
+  inputs:
+    azureSubscription: 'Testproject'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az account show
+
+# Build Docker image
+- script: |
+    cd app
+    docker build -t $(imageName) .
+  displayName: 'Build Docker Image'
+
+# Tag image for ACR
+- script: |
+    docker tag $(imageName) $(acrName).azurecr.io/$(imageName):latest
+  displayName: 'Tag Image'
+
+# Login to ACR
+- task: AzureCLI@2
+  displayName: 'Login to ACR'
+  inputs:
+    azureSubscription: 'Testproject'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az acr login --name $(acrName)
+
+# Push image
+- script: |
+    docker push $(acrName).azurecr.io/$(imageName):latest
+  displayName: 'Push Image to ACR'
+
+# Get AKS credentials
+- task: AzureCLI@2
+  displayName: 'Get AKS Credentials'
+  inputs:
+    azureSubscription: 'Testproject'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az aks get-credentials --resource-group $(rgName) --name $(aksName) --overwrite-existing
+
+# Install kubectl
+- script: |
+    curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    sudo mv kubectl /usr/local/bin/
+     kubectl version --client
+  displayName: 'Install kubectl'
+
+# Deploy to Kubernetes
+- script: |
+    kubectl apply -f k8s/deployment.yaml
+    kubectl apply -f k8s/service.yaml
+  displayName: 'Deploy to AKS'

@@ -1,11 +1,12 @@
 const express = require("express");
+const path = require("path");
+
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.get("/", (req, res) => {
-  res.send("Hello from Azure DevOps Project 🚀");
-});
+// Serve static files
+app.use(express.static(path.join(__dirname, "public")));
 
 app.listen(port, "0.0.0.0", () =>
-  console.log(`Running on port ${port}`)
+  console.log('Running on port ${port}')
 );
