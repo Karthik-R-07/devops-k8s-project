@@ -1,0 +1,56 @@
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  imageName: devops-demo
+
+steps:
+
+# Install Terraform
+- task: TerraformInstaller@1
+  inputs:
+    terraformVersion: latest
+
+# Provision Azure Infrastructure
+- script: |
+    cd Terraform-demo
+    terraform init
+    terraform apply -auto-approve
+  displayName: 'Terraform Apply'
+
+# Build & Push Docker Image to ACR (Docker runs in Azure, not your laptop)
+- task: Docker@2
+  displayName: 'Build and Push Image'
+  inputs:
+    containerRegistry: 'acrterraformtestdev'
+    repository: $(imageName)
+    command: buildAndPush
+    Dockerfile: app/Dockerfile
+    tags: latest
+
+# Deploy to AKS - Deployment
+- task: Kubernetes@1
+  displayName: 'Deploy App to AKS'
+  inputs:
+    connectionType: Azure Resource Manager
+    azureSubscriptionEndpoint: 'Testproject'
+    azureResourceGroup: 'terraform-test'
+    kubernetesCluster: 'aks-cluster-terraform'
+    command: apply
+    useConfigurationFile: true
+    configuration: k8s/deployment.yaml
+
+# Deploy Service (Expose to Internet)
+- task: Kubernetes@1
+  displayName: 'Expose Service'
+  inputs:
+    connectionType: Azure Resource Manager
+    azureSubscriptionEndpoint: 'Testproject'
+    azureResourceGroup: 'terraform-test'
+    kubernetesCluster: 'aks-cluster-terraform'
+    command: apply
+    useConfigurationFile: true
+    configuration: k8s/service.yaml
